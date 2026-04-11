@@ -5,6 +5,9 @@ from tree_sitter import Language, Parser, Query
 import tree_sitter_python as tspython
 from neo4j import GraphDatabase
 import chromadb
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Neo4j connection details
 URI = "neo4j://127.0.0.1:7687"
@@ -169,7 +172,7 @@ def analyze_project(directory_path):
 
     # ── Wipe & recreate ChromaDB collection ────────────────────────────────
     print("[Chroma] Resetting 'codebase_nodes' collection...")
-    chroma_client = chromadb.PersistentClient(path="./chroma_data")
+    chroma_client = chromadb.PersistentClient(path=os.environ.get("CHROMA_PERSIST_PATH", "./chroma_data"))
     try:
         chroma_client.delete_collection("codebase_nodes")
         print("[Chroma] Deleted existing collection.")

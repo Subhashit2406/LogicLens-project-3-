@@ -3,617 +3,601 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Codebase Graph Explorer</title>
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <title>LogicLens — Codebase Intelligence</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/standalone/umd/vis-network.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#08101f;--surface:#0f1a2e;--surface2:#162336;--surface3:#1c2d42;
+      --border:#1e3050;--accent:#4f8ef7;--green:#34d399;--yellow:#fbbf24;
+      --red:#f87171;--purple:#a78bfa;--cyan:#22d3ee;--text:#e2e8f0;--muted:#64748b;
+      --glow:0 0 20px rgba(79,142,247,.2);
+    }
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
 
-    :root {
-      --bg:       #0a0e1a;
-      --surface:  #111827;
-      --surface2: #1a2235;
-      --border:   #1e2d45;
-      --accent:   #4f8ef7;
-      --green:    #34d399;
-      --yellow:   #fbbf24;
-      --red:      #f87171;
-      --purple:   #a78bfa;
-      --text:     #e2e8f0;
-      --muted:    #64748b;
-      --glow:     0 0 20px rgba(79,142,247,0.2);
-    }
+    /* HEADER */
+    header{background:var(--surface);border-bottom:1px solid var(--border);padding:9px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:20}
+    .brand{display:flex;align-items:center;gap:8px;font-size:.88rem;font-weight:700;color:var(--accent);white-space:nowrap;margin-right:4px}
+    .brand-icon{width:28px;height:28px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px}
+    #path-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 13px;color:var(--text);font-size:.81rem;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s,box-shadow .2s;min-width:0}
+    #path-input:focus{border-color:var(--accent);box-shadow:var(--glow)}
+    #path-input::placeholder{color:var(--muted)}
+    .hbtn{display:flex;align-items:center;gap:7px;padding:7px 15px;font-weight:600;font-size:.81rem;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;transition:opacity .2s,transform .1s,box-shadow .2s}
+    #analyze-btn{background:linear-gradient(135deg,#4f8ef7,#6366f1);color:#fff;box-shadow:0 2px 12px rgba(79,142,247,.3)}
+    #analyze-btn:hover:not(:disabled){opacity:.88;box-shadow:0 4px 20px rgba(79,142,247,.45)}
+    #analyze-btn:disabled{opacity:.45;cursor:not-allowed}
+    #whatif-toggle-btn{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;box-shadow:0 2px 12px rgba(124,58,237,.3)}
+    #whatif-toggle-btn:hover{opacity:.88}
+    .spinner{display:none;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+    .loading .spinner{display:block} .loading .btn-text{display:none}
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+    /* TOOLBAR */
+    #toolbar{display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+    #status-text{font-size:.74rem;color:var(--muted);flex:1;min-width:200px;transition:color .25s}
+    #status-text.ok{color:var(--green)} #status-text.err{color:var(--red)} #status-text.info{color:var(--accent)}
+    .tool-group{display:flex;align-items:center;gap:3px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:3px}
+    .tool-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px 10px;border-radius:5px;font-size:.74rem;font-family:'Inter',sans-serif;display:flex;align-items:center;gap:5px;transition:background .15s,color .15s;white-space:nowrap}
+    .tool-btn:hover{background:var(--surface2);color:var(--text)} .tool-btn.active{background:var(--accent);color:#fff}
+    .sep{width:1px;height:18px;background:var(--border);margin:0 2px}
+    #legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .legend-item{display:flex;align-items:center;gap:5px;font-size:.69rem;color:var(--muted)}
+    .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 
-    /* ── HEADER ── */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 18px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
-      z-index: 20;
-    }
+    /* MAIN */
+    main{flex:1;display:flex;overflow:hidden;position:relative}
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--accent);
-      white-space: nowrap;
-      margin-right: 4px;
-    }
-    .brand-icon {
-      width: 28px; height: 28px;
-      background: linear-gradient(135deg, #4f8ef7, #7c3aed);
-      border-radius: 7px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px;
-    }
+    /* GRAPH PANE */
+    #graph-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;transition:flex .3s}
+    #mynetwork{flex:1;width:100%;height:100%;min-height:100vh;background:radial-gradient(ellipse at 50% 40%,#0e1929 0%,var(--bg) 75%)}
+    #empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted);pointer-events:none}
+    #empty-state .big-icon{font-size:52px;opacity:.15}
+    #empty-state p{font-size:.93rem} #empty-state small{font-size:.75rem;opacity:.6}
 
-    #path-input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 14px;
-      color: var(--text);
-      font-size: 0.82rem;
-      font-family: 'JetBrains Mono', monospace;
-      outline: none;
-      transition: border-color .2s, box-shadow .2s;
-      min-width: 0;
-    }
-    #path-input:focus { border-color: var(--accent); box-shadow: var(--glow); }
-    #path-input::placeholder { color: var(--muted); }
+    /* NODE SIDE PANEL */
+    #side-panel{position:absolute;right:0;top:0;bottom:0;width:250px;background:var(--surface);border-left:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:11px;transform:translateX(110%);transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:10;overflow-y:auto}
+    #side-panel.open{transform:translateX(0)}
+    .panel-title{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+    #close-panel,#close-whatif{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:4px}
+    #close-panel:hover,#close-whatif:hover{color:var(--text);background:var(--surface2)}
+    .panel-badge{display:inline-flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:.81rem;font-family:'JetBrains Mono',monospace;color:var(--text);word-break:break-all}
+    .panel-badge.name{color:var(--accent);font-weight:600;font-size:.92rem}
+    .panel-row{display:flex;flex-direction:column;gap:4px}
+    .panel-label{font-size:.63rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
 
-    #analyze-btn {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 18px;
-      background: linear-gradient(135deg, #4f8ef7, #6366f1);
-      color: #fff;
-      font-weight: 600;
-      font-size: 0.82rem;
-      border: none; border-radius: 8px;
-      cursor: pointer; white-space: nowrap;
-      transition: opacity .2s, transform .1s, box-shadow .2s;
-      box-shadow: 0 2px 12px rgba(79,142,247,0.3);
-    }
-    #analyze-btn:hover:not(:disabled) { opacity: 0.88; box-shadow: 0 4px 20px rgba(79,142,247,0.45); }
-    #analyze-btn:active:not(:disabled) { transform: scale(0.97); }
-    #analyze-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* WHAT-IF PANEL */
+    #whatif-panel{width:460px;min-width:340px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);z-index:15;position:absolute;right:0;top:0;bottom:0;overflow:hidden}
+    #whatif-panel.open{transform:translateX(0)}
+    #whatif-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0}
+    .wi-title{display:flex;align-items:center;gap:8px;font-size:.78rem;font-weight:700;color:var(--purple)}
+    .wi-title .icon{font-size:16px}
+    #whatif-input-row{display:flex;gap:8px}
+    #wi-func-select{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:.79rem;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s}
+    #wi-func-select:focus{border-color:var(--purple)}
+    #wi-func-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:.79rem;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s;display:none}
+    #wi-func-input:focus{border-color:var(--purple)}
+    #wi-run-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;font-weight:600;font-size:.78rem;border:none;border-radius:7px;cursor:pointer;transition:opacity .2s,box-shadow .2s;box-shadow:0 2px 10px rgba(124,58,237,.35);white-space:nowrap}
+    #wi-run-btn:hover:not(:disabled){opacity:.88;box-shadow:0 4px 18px rgba(124,58,237,.5)}
+    #wi-run-btn:disabled{opacity:.45;cursor:not-allowed}
+    .wi-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);flex-shrink:0}
+    .wi-tab{padding:8px 16px;font-size:.76rem;font-weight:500;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
+    .wi-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
+    #whatif-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+    .wi-pane{flex:1;overflow-y:auto;padding:14px;display:none;flex-direction:column;gap:8px}
+    .wi-pane.active{display:flex}
 
-    .spinner {
-      display: none; width: 13px; height: 13px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
-    #analyze-btn.loading .spinner  { display: block; }
-    #analyze-btn.loading .btn-text { display: none; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* AGENT STEPS */
+    .step-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.76rem;line-height:1.6;animation:fadeIn .3s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .step-card .step-agent{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+    .step-card.investigator .step-agent{color:var(--accent)}
+    .step-card.architect .step-agent{color:var(--green)}
+    .step-card.explainer .step-agent{color:var(--yellow)}
+    .step-card.log{background:var(--bg);border-color:transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:6px 10px}
+    .step-card.error{border-color:var(--red);color:var(--red)}
+    #wi-thinking{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.74rem;padding:6px 0}
+    .pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--purple);animation:pulse 1.2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+    #wi-empty{color:var(--muted);font-size:.82rem;text-align:center;margin-top:40px;opacity:.7}
 
-    /* ── TOOLBAR STRIP ── */
-    #toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 18px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      flex-wrap: wrap;
-    }
+    /* REPORT */
+    #wi-report-pane{padding:16px;line-height:1.7}
+    #wi-report-pane h1,#wi-report-pane h2{color:var(--accent);margin:14px 0 6px;font-size:.95rem;border-bottom:1px solid var(--border);padding-bottom:4px}
+    #wi-report-pane h3{color:var(--purple);font-size:.85rem;margin:10px 0 4px}
+    #wi-report-pane p{font-size:.8rem;margin-bottom:8px}
+    #wi-report-pane ul,#wi-report-pane ol{padding-left:18px;font-size:.8rem;margin-bottom:8px}
+    #wi-report-pane li{margin-bottom:3px}
+    #wi-report-pane table{width:100%;border-collapse:collapse;font-size:.76rem;margin-bottom:10px}
+    #wi-report-pane th{background:var(--surface3);color:var(--muted);padding:5px 8px;text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
+    #wi-report-pane td{padding:5px 8px;border-bottom:1px solid var(--border)}
+    #wi-report-pane code{background:var(--surface3);border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--cyan)}
+    #wi-report-pane pre{background:var(--surface3);border-radius:7px;padding:10px 12px;overflow-x:auto;margin-bottom:10px}
+    #wi-report-pane pre code{background:none;padding:0;font-size:.76rem}
+    #wi-report-pane blockquote{border-left:3px solid var(--purple);padding-left:10px;color:var(--muted);font-size:.79rem}
+    #wi-copy-btn{margin:12px 14px;align-self:flex-start;padding:6px 14px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.76rem;cursor:pointer;transition:background .2s;display:none}
+    #wi-copy-btn:hover{background:var(--surface2)}
 
-    #status-text {
-      font-size: 0.75rem;
-      color: var(--muted);
-      flex: 1;
-      min-width: 200px;
-      transition: color .25s;
-    }
-    #status-text.ok  { color: var(--green); }
-    #status-text.err { color: var(--red); }
-    #status-text.info{ color: var(--accent); }
+    /* STATS BAR */
+    #stats-bar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:6px 16px;display:none;align-items:center;gap:20px;font-size:.71rem;color:var(--muted);box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:5}
+    #stats-bar.visible{display:flex}
+    .stat{display:flex;align-items:center;gap:6px} .stat strong{color:var(--text);font-size:.84rem}
 
-    .tool-group {
-      display: flex; align-items: center; gap: 4px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 3px;
-    }
-
-    .tool-btn {
-      background: none; border: none;
-      color: var(--muted); cursor: pointer;
-      padding: 4px 10px;
-      border-radius: 5px;
-      font-size: 0.75rem;
-      font-family: 'Inter', sans-serif;
-      display: flex; align-items: center; gap: 5px;
-      transition: background .15s, color .15s;
-      white-space: nowrap;
-    }
-    .tool-btn:hover { background: var(--surface2); color: var(--text); }
-    .tool-btn.active { background: var(--accent); color: #fff; }
-
-    .sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
-
-    /* ── LEGEND ── */
-    #legend {
-      display: flex; align-items: center; gap: 10px;
-      flex-wrap: wrap;
-    }
-    .legend-item {
-      display: flex; align-items: center; gap: 5px;
-      font-size: 0.7rem; color: var(--muted);
-    }
-    .legend-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    /* ── MAIN ── */
-    main {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-      position: relative;
-    }
-
-    #mynetwork {
-      flex: 1;
-      background: radial-gradient(ellipse at 50% 40%, #0e1929 0%, var(--bg) 75%);
-    }
-
-    /* ── EMPTY STATE ── */
-    #empty-state {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 14px; color: var(--muted);
-      pointer-events: none;
-    }
-    #empty-state .big-icon { font-size: 52px; opacity: 0.15; }
-    #empty-state p  { font-size: 0.95rem; }
-    #empty-state small { font-size: 0.76rem; opacity: .6; }
-
-    /* ── SIDE PANEL ── */
-    #side-panel {
-      position: absolute; right: 0; top: 0; bottom: 0;
-      width: 260px;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      padding: 16px;
-      display: flex; flex-direction: column; gap: 12px;
-      transform: translateX(110%);
-      transition: transform .28s cubic-bezier(.4,0,.2,1);
-      z-index: 10;
-      overflow-y: auto;
-    }
-    #side-panel.open { transform: translateX(0); }
-
-    .panel-title {
-      font-size: 0.7rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .08em;
-      color: var(--muted);
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    #close-panel {
-      background: none; border: none; color: var(--muted);
-      cursor: pointer; font-size: 14px; line-height: 1;
-      padding: 2px 6px; border-radius: 4px;
-    }
-    #close-panel:hover { color: var(--text); background: var(--surface2); }
-
-    .panel-badge {
-      display: inline-flex; align-items: center;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-size: 0.83rem;
-      font-family: 'JetBrains Mono', monospace;
-      color: var(--text);
-      word-break: break-all;
-    }
-    .panel-badge.name { color: var(--accent); font-weight: 600; font-size: 0.95rem; }
-
-    .panel-row { display: flex; flex-direction: column; gap: 4px; }
-    .panel-label {
-      font-size: 0.65rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .07em;
-      color: var(--muted);
-    }
-
-    /* ── STATS BAR ── */
-    #stats-bar {
-      display: none;
-      position: absolute; bottom: 14px; left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 6px 16px;
-      display: none;
-      align-items: center;
-      gap: 20px;
-      font-size: 0.72rem;
-      color: var(--muted);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      z-index: 5;
-    }
-    #stats-bar.visible { display: flex; }
-    .stat { display: flex; align-items: center; gap: 6px; }
-    .stat strong { color: var(--text); font-size: 0.85rem; }
+    /* SCROLLBARS */
+    ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:transparent} ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
   </style>
 </head>
 <body>
 
 <header>
-  <div class="brand">
-    <div class="brand-icon">🔭</div>
-    Graph Explorer
-  </div>
+  <div class="brand"><div class="brand-icon">🔭</div>LogicLens</div>
   <input id="path-input" type="text" placeholder="Paste project folder path…"/>
-  <button id="analyze-btn">
-    <div class="spinner"></div>
-    <span class="btn-text">⚡ Analyze</span>
+  <button id="analyze-btn" class="hbtn">
+    <div class="spinner"></div><span class="btn-text">⚡ Analyze</span>
   </button>
+  <button id="whatif-toggle-btn" class="hbtn">🤖 What-If Engine</button>
 </header>
 
 <div id="toolbar">
   <span id="status-text">Enter a project path and click Analyze.</span>
-
   <div class="tool-group">
-    <button class="tool-btn active" id="btn-hierarchy" title="Hierarchical top-down layout">↕ Hierarchy</button>
+    <button class="tool-btn active" id="btn-hierarchy">↕ Hierarchy</button>
     <div class="sep"></div>
-    <button class="tool-btn" id="btn-physics" title="Force-directed layout">⚛ Physics</button>
+    <button class="tool-btn" id="btn-physics">⚛ Physics</button>
   </div>
-
   <div class="tool-group">
-    <button class="tool-btn" id="btn-fit" title="Fit all nodes in view">⊡ Fit</button>
+    <button class="tool-btn" id="btn-fit">⊡ Fit</button>
     <div class="sep"></div>
     <button class="tool-btn" id="btn-zoom-in">＋</button>
     <div class="sep"></div>
     <button class="tool-btn" id="btn-zoom-out">－</button>
   </div>
-
   <div id="legend"></div>
 </div>
 
 <main>
-  <div id="empty-state">
-    <div class="big-icon">🕸️</div>
-    <p>No graph loaded yet</p>
-    <small>Analyze a Python project to visualize the function call graph</small>
-  </div>
+  <!-- GRAPH PANE -->
+  <div id="graph-pane">
+    <div id="empty-state">
+      <div class="big-icon">🕸️</div>
+      <p>No graph loaded yet</p>
+      <small>Analyze a Python project to visualize the function call graph</small>
+    </div>
+    <div id="mynetwork"></div>
 
-  <div id="mynetwork"></div>
+    <!-- Node details panel -->
+    <div id="side-panel">
+      <div class="panel-title">Function Details<button id="close-panel">✕</button></div>
+      <div class="panel-row"><span class="panel-label">Name</span><span class="panel-badge name" id="d-name">—</span></div>
+      <div class="panel-row"><span class="panel-label">File</span><span class="panel-badge" id="d-file">—</span></div>
+      <div class="panel-row"><span class="panel-label">Line</span><span class="panel-badge" id="d-line">—</span></div>
+      <div class="panel-row"><span class="panel-label">Author</span><span class="panel-badge" id="d-author">—</span></div>
+      <div class="panel-row"><span class="panel-label">Color Group</span><span class="panel-badge" id="d-group">—</span></div>
+      <div style="margin-top:8px">
+        <button class="hbtn" id="run-whatif-from-node"
+          style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;font-size:.76rem;padding:6px 12px;width:100%;justify-content:center;box-shadow:0 2px 8px rgba(124,58,237,.3)">
+          🤖 Run What-If on this function
+        </button>
+      </div>
+    </div>
 
-  <div id="side-panel">
-    <div class="panel-title">
-      Function Details
-      <button id="close-panel">✕</button>
-    </div>
-    <div class="panel-row">
-      <span class="panel-label">Name</span>
-      <span class="panel-badge name" id="d-name">—</span>
-    </div>
-    <div class="panel-row">
-      <span class="panel-label">File</span>
-      <span class="panel-badge" id="d-file">—</span>
-    </div>
-    <div class="panel-row">
-      <span class="panel-label">Line</span>
-      <span class="panel-badge" id="d-line">—</span>
-    </div>
-    <div class="panel-row">
-      <span class="panel-label">Author</span>
-      <span class="panel-badge" id="d-author">—</span>
-    </div>
-    <div class="panel-row">
-      <span class="panel-label">Color Group (File)</span>
-      <span class="panel-badge" id="d-group">—</span>
+    <div id="stats-bar">
+      <div class="stat"><strong id="st-nodes">0</strong> functions</div>
+      <div class="stat"><strong id="st-edges">0</strong> calls</div>
+      <div class="stat"><strong id="st-files">0</strong> files</div>
     </div>
   </div>
 
-  <div id="stats-bar">
-    <div class="stat"><strong id="st-nodes">0</strong> functions</div>
-    <div class="stat"><strong id="st-edges">0</strong> calls</div>
-    <div class="stat"><strong id="st-files">0</strong> files</div>
+  <!-- WHAT-IF PANEL -->
+  <div id="whatif-panel">
+    <div id="whatif-header">
+      <div class="wi-title"><span class="icon">🤖</span>What-If Explanation Engine<button id="close-whatif" style="margin-left:auto">✕</button></div>
+      <div id="whatif-input-row">
+        <select id="wi-func-select">
+          <option value="">— pick a function —</option>
+          <option value="__custom__">✏ Type manually…</option>
+        </select>
+        <input id="wi-func-input" type="text" placeholder="function name…"/>
+        <button id="wi-run-btn" class="hbtn" style="padding:7px 12px">
+          <div class="spinner"></div><span class="btn-text">▶ Run</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="wi-tabs">
+      <button class="wi-tab active" data-pane="steps">🔍 Agent Steps</button>
+      <button class="wi-tab" data-pane="report">📋 Blast Report</button>
+    </div>
+
+    <div id="whatif-body">
+      <div class="wi-pane active" id="wi-steps-pane">
+        <div id="wi-empty">Run the engine on any function to see the agents reason through your codebase.</div>
+        <div id="wi-thinking" style="display:none"><div class="pulse-dot"></div>Agents are analysing…</div>
+      </div>
+      <div class="wi-pane" id="wi-report-pane">
+        <div id="wi-report-content" style="font-size:.8rem;color:var(--muted)">The report will appear here after the engine finishes.</div>
+      </div>
+    </div>
+    <button id="wi-copy-btn">📋 Copy Markdown</button>
   </div>
 </main>
 
 <script>
-// ── Palette  (up to 12 distinct file colors) ──────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof vis === 'undefined') {
+    console.error('Vis.js library not loaded. Please check the script tag.');
+    return;
+  }
+
+// ── Palette ──────────────────────────────────────────────────────────────────
 const PALETTE = [
-  { bg: '#1d4ed8', border: '#60a5fa', highlight: '#3b82f6' },  // blue
-  { bg: '#065f46', border: '#34d399', highlight: '#059669' },  // green
-  { bg: '#7c2d12', border: '#fb923c', highlight: '#ea580c' },  // orange
-  { bg: '#6b21a8', border: '#c084fc', highlight: '#9333ea' },  // purple
-  { bg: '#be185d', border: '#f472b6', highlight: '#ec4899' },  // pink
-  { bg: '#0e7490', border: '#22d3ee', highlight: '#0891b2' },  // cyan
-  { bg: '#713f12', border: '#fbbf24', highlight: '#d97706' },  // amber
-  { bg: '#1e3a5f', border: '#93c5fd', highlight: '#3b82f6' },  // sky
-  { bg: '#14532d', border: '#86efac', highlight: '#16a34a' },  // lime
-  { bg: '#4c1d95', border: '#ddd6fe', highlight: '#7c3aed' },  // violet
-  { bg: '#881337', border: '#fda4af', highlight: '#e11d48' },  // rose
-  { bg: '#1c4532', border: '#6ee7b7', highlight: '#059669' },  // teal
+  {bg:'#1d4ed8',border:'#60a5fa',highlight:'#3b82f6'},
+  {bg:'#065f46',border:'#34d399',highlight:'#059669'},
+  {bg:'#7c2d12',border:'#fb923c',highlight:'#ea580c'},
+  {bg:'#6b21a8',border:'#c084fc',highlight:'#9333ea'},
+  {bg:'#be185d',border:'#f472b6',highlight:'#ec4899'},
+  {bg:'#0e7490',border:'#22d3ee',highlight:'#0891b2'},
+  {bg:'#713f12',border:'#fbbf24',highlight:'#d97706'},
+  {bg:'#1e3a5f',border:'#93c5fd',highlight:'#3b82f6'},
+  {bg:'#14532d',border:'#86efac',highlight:'#16a34a'},
+  {bg:'#4c1d95',border:'#ddd6fe',highlight:'#7c3aed'},
 ];
 
-// ── State ─────────────────────────────────────────────────────────────────
-let network     = null;
-let layoutMode  = 'hierarchy'; // 'hierarchy' | 'physics'
-let fileColorMap= {};           // filename → palette index
+// ── State ────────────────────────────────────────────────────────────────────
+let network = null, layoutMode = 'hierarchy', fileColorMap = {};
+let currentNodeName = null, rawReportMd = '';
+let whatIfStreamOpen = false;
+let whatIfServerError = false;
 
-// ── DOM refs ─────────────────────────────────────────────────────────────
-const btn         = document.getElementById('analyze-btn');
+// ── DOM Refs ─────────────────────────────────────────────────────────────────
+const analyzeBtn  = document.getElementById('analyze-btn');
 const pathInput   = document.getElementById('path-input');
 const statusEl    = document.getElementById('status-text');
 const emptyState  = document.getElementById('empty-state');
 const sidePanel   = document.getElementById('side-panel');
 const statsBar    = document.getElementById('stats-bar');
 const legendEl    = document.getElementById('legend');
-const btnHierarchy= document.getElementById('btn-hierarchy');
-const btnPhysics  = document.getElementById('btn-physics');
+const btnH        = document.getElementById('btn-hierarchy');
+const btnP        = document.getElementById('btn-physics');
 const btnFit      = document.getElementById('btn-fit');
-const btnZoomIn   = document.getElementById('btn-zoom-in');
-const btnZoomOut  = document.getElementById('btn-zoom-out');
 const closeBtn    = document.getElementById('close-panel');
+const whatifPanel = document.getElementById('whatif-panel');
+const wiFuncSel   = document.getElementById('wi-func-select');
+const wiFuncInput = document.getElementById('wi-func-input');
+const wiRunBtn    = document.getElementById('wi-run-btn');
+const wiStepsPane = document.getElementById('wi-steps-pane');
+const wiReportPane= document.getElementById('wi-report-pane');
+const wiEmpty     = document.getElementById('wi-empty');
+const wiThinking  = document.getElementById('wi-thinking');
+const wiRepCont   = document.getElementById('wi-report-content');
+const wiCopyBtn   = document.getElementById('wi-copy-btn');
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-function setStatus(msg, cls = '') {
-  statusEl.textContent = msg;
-  statusEl.className   = cls;
-}
-function setLoading(on) {
-  btn.disabled = on;
-  btn.classList.toggle('loading', on);
-}
-function basename(p) { return p.replace(/\\/g, '/').split('/').pop(); }
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const setStatus = (msg, cls='') => { statusEl.textContent = msg; statusEl.className = cls; };
+const setLoading = on => { analyzeBtn.disabled = on; analyzeBtn.classList.toggle('loading', on); };
+const basename = p => p.replace(/\\/g,'/').split('/').pop();
 
-// ── Analyze button ────────────────────────────────────────────────────────
-btn.addEventListener('click', async () => {
+// ── Analyze ───────────────────────────────────────────────────────────────────
+analyzeBtn.addEventListener('click', async () => {
   const path = pathInput.value.trim();
-  if (!path) { setStatus('⚠ Please enter a folder path.', 'err'); return; }
-
+  if (!path) { setStatus('⚠ Please enter a folder path.','err'); return; }
   setLoading(true);
-  setStatus('⏳ Extracting functions and building graph…', 'info');
+  setStatus('⏳ Extracting functions and building graph…','info');
   emptyState.style.display = 'none';
   statsBar.classList.remove('visible');
-
   try {
-    const res  = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path }),
-    });
+    const res  = await fetch('/api/analyze', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})});
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Extraction failed');
-
-    setStatus(`✅ Found ${data.functions} function(s) across ${data.files} file(s) — loading graph…`, 'ok');
+    setStatus(`✅ ${data.functions} function(s) across ${data.files} file(s) — loading graph…`,'ok');
     await loadGraph();
-  } catch (e) {
-    setStatus(`❌ ${e.message}`, 'err');
-    emptyState.style.display = 'flex';
-  } finally {
-    setLoading(false);
-  }
+    await loadFunctionList();
+  } catch(e) { setStatus(`❌ ${e.message}`,'err'); emptyState.style.display='flex'; }
+  finally { setLoading(false); }
 });
 
-// ── Load graph data ───────────────────────────────────────────────────────
+// ── Graph ─────────────────────────────────────────────────────────────────────
 async function loadGraph() {
   const res  = await fetch('/api/graph');
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to load graph');
+  if (!res.ok) throw new Error(data.error||'Failed to load graph');
+  
+  console.log("Graph Data Received:", data);
+  
+  const nodes = data.nodes || [];
+  const edges = data.edges || [];
 
-  if (!data.nodes.length) {
-    setStatus('No functions found. Check that the folder contains .py files.', 'err');
-    emptyState.style.display = 'flex';
+  if (!Array.isArray(nodes) || nodes.length === 0) {
+    console.warn("No graph data to render.");
+    setStatus('No graph data available.','err');
+    emptyState.innerHTML = '<div class="big-icon">🕸️</div><p>No Graph Data</p><small>The API returned an empty list of nodes or edges.</small>';
+    emptyState.style.display='flex';
     return;
   }
+  if (!Array.isArray(edges)) {
+    data.edges = [];
+  }
 
-  // Build file→color mapping
-  fileColorMap = {};
-  let colorIdx = 0;
-  data.nodes.forEach(n => {
-    const f = basename(n.file || '');
-    if (f && !(f in fileColorMap)) {
-      fileColorMap[f] = colorIdx++ % PALETTE.length;
-    }
-  });
-
+  fileColorMap = {}; let ci=0;
+  nodes.forEach(n => { const f=basename(n.file||''); if(f && !(f in fileColorMap)) fileColorMap[f]=ci++%PALETTE.length; });
   renderLegend();
-  renderGraph(data.nodes, data.edges);
-
-  document.getElementById('st-nodes').textContent = data.nodes.length;
-  document.getElementById('st-edges').textContent = data.edges.length;
+  drawGraph(nodes, edges);
+  document.getElementById('st-nodes').textContent = nodes.length;
+  document.getElementById('st-edges').textContent = edges.length;
   document.getElementById('st-files').textContent = Object.keys(fileColorMap).length;
   statsBar.classList.add('visible');
-
-  setStatus(
-    `🗺 ${data.nodes.length} functions · ${data.edges.length} calls · ${Object.keys(fileColorMap).length} files — click a node for details`,
-    'ok'
-  );
+  setStatus(`🗺 ${nodes.length} fn · ${edges.length} calls · ${Object.keys(fileColorMap).length} files — click a node for details`,'ok');
 }
 
-// ── Legend ────────────────────────────────────────────────────────────────
 function renderLegend() {
   legendEl.innerHTML = '';
-  Object.entries(fileColorMap).forEach(([fname, idx]) => {
-    const p     = PALETTE[idx];
-    const item  = document.createElement('div');
-    item.className = 'legend-item';
-    item.innerHTML = `<span class="legend-dot" style="background:${p.border}"></span>${fname}`;
+  Object.entries(fileColorMap).forEach(([fname,idx]) => {
+    const p=PALETTE[idx], item=document.createElement('div');
+    item.className='legend-item';
+    item.innerHTML=`<span class="legend-dot" style="background:${p.border}"></span>${fname}`;
     legendEl.appendChild(item);
   });
 }
 
-// ── vis.js render ─────────────────────────────────────────────────────────
-function renderGraph(nodes, edges) {
-  if (network) { network.destroy(); network = null; }
-
-  const visNodes = new vis.DataSet(nodes.map(n => {
-    const fname = basename(n.file || '');
-    const idx   = fileColorMap[fname] ?? 0;
-    const pal   = PALETTE[idx];
-    return {
-      id:    n.id,
-      label: n.label,
-      title: `<b>${n.label}</b><br/>${fname}:${n.line}<br/>by ${n.author || '?'}`,
-      shape: 'box',
-      color: {
-        background: pal.bg,
-        border:     pal.border,
-        highlight:  { background: pal.highlight, border: '#ffffff' },
-        hover:      { background: pal.highlight, border: pal.border },
-      },
-      font: {
-        color: '#e2e8f0', size: 13,
-        face: 'JetBrains Mono, monospace',
-        bold: { color: '#ffffff', size: 13 },
-      },
-      borderWidth: 1.5,
-      borderWidthSelected: 3,
-      shadow: { enabled: true, color: pal.border + '44', size: 10, x: 0, y: 3 },
-      margin: { top: 8, bottom: 8, left: 12, right: 12 },
-      _raw: n,
-    };
-  }));
-
-  const visEdges = new vis.DataSet(edges.map((e, i) => ({
-    id:     i,
-    from:   e.from,
-    to:     e.to,
-    label:  '',   // keep edges clean — no label clutter
-    arrows: { to: { enabled: true, scaleFactor: 0.65, type: 'arrow' } },
-    color:  { color: '#1e3a5e', highlight: '#60a5fa', hover: '#60a5fa', opacity: 0.85 },
-    width:  1.8,
-    smooth: layoutMode === 'hierarchy'
-      ? { enabled: false }
-      : { type: 'dynamic' },
-  })));
-
-  const opts = buildOptions();
-  const container = document.getElementById('mynetwork');
-  network = new vis.Network(container, { nodes: visNodes, edges: visEdges }, opts);
-
-  network.on('click', params => {
-    if (params.nodes.length) {
-      const n = visNodes.get(params.nodes[0]);
-      openPanel(n._raw);
-    } else {
-      closePanel();
-    }
-  });
-
-  network.on('stabilized', () => {
-    network.fit({ animation: { duration: 600, easingFunction: 'easeInOutQuad' } });
-  });
-}
-
-// ── Build vis options based on layoutMode ─────────────────────────────────
-function buildOptions() {
-  const base = {
-    interaction: {
-      hover: true, tooltipDelay: 150,
-      zoomView: true, dragView: true, dragNodes: true,
-      navigationButtons: false,
-    },
-    nodes: { chosen: true },
-  };
-
-  if (layoutMode === 'hierarchy') {
-    return {
-      ...base,
-      layout: {
-        hierarchical: {
-          enabled: true,
-          direction: 'UD',          // Up → Down
-          sortMethod: 'directed',
-          nodeSpacing: 160,
-          levelSeparation: 110,
-          treeSpacing: 200,
-          blockShifting: true,
-          edgeMinimization: true,
-          parentCentralization: true,
-        },
-      },
-      physics: { enabled: false },
-    };
+function drawGraph(nodes, edges) {
+  if (!Array.isArray(nodes) || !nodes.length) {
+    console.warn('drawGraph skipped: no nodes available');
+    setStatus('No graph nodes available to render.','err');
+    emptyState.style.display='flex';
+    return;
   }
 
-  return {
-    ...base,
-    layout: { hierarchical: { enabled: false }, improvedLayout: true },
-    physics: {
-      enabled: true,
-      solver: 'forceAtlas2Based',
-      forceAtlas2Based: {
-        gravitationalConstant: -60,
-        centralGravity: 0.005,
-        springLength: 180,
-        springConstant: 0.05,
-        damping: 0.5,
-        avoidOverlap: 0.8,
-      },
-      stabilization: { iterations: 200 },
-    },
-  };
+  try {
+    renderGraph(nodes, edges);
+  } catch (err) {
+    console.error('drawGraph failed:', err);
+    setStatus('❌ Graph rendering failed. See console for details.','err');
+    emptyState.style.display='flex';
+  }
 }
 
-// ── Layout toggle ─────────────────────────────────────────────────────────
-btnHierarchy.addEventListener('click', () => {
-  if (layoutMode === 'hierarchy') return;
-  layoutMode = 'hierarchy';
-  btnHierarchy.classList.add('active');
-  btnPhysics.classList.remove('active');
-  if (network) { network.setOptions(buildOptions()); network.stabilize(); }
-});
+function renderGraph(nodes, edges) {
+  if (network) { network.destroy(); network=null; }
+  const visNodes = new vis.DataSet(nodes.map(n => {
+    const fname=basename(n.file||''), idx=fileColorMap[fname]??0, pal=PALETTE[idx];
+    return {
+      id:n.id, label:n.label,
+      title:`<b>${n.label}</b><br/>${fname}:${n.line}<br/>by ${n.author||'?'}`,
+      shape:'box',
+      color:{background:pal.bg,border:pal.border,highlight:{background:pal.highlight,border:'#fff'},hover:{background:pal.highlight,border:pal.border}},
+      font:{color:'#e2e8f0',size:13,face:'JetBrains Mono,monospace'},
+      borderWidth:1.5, borderWidthSelected:3,
+      shadow:{enabled:true,color:pal.border+'44',size:10,x:0,y:3},
+      margin:{top:8,bottom:8,left:12,right:12}, _raw:n,
+    };
+  }));
+  const visEdges = new vis.DataSet(edges.map((e,i) => ({
+    id:i, from:e.from, to:e.to, label:'',
+    arrows:{to:{enabled:true,scaleFactor:.65,type:'arrow'}},
+    color:{color:'#1e3a5e',highlight:'#60a5fa',hover:'#60a5fa',opacity:.85},
+    width:1.8, smooth:layoutMode==='hierarchy'?{enabled:false}:{type:'dynamic'},
+  })));
 
-btnPhysics.addEventListener('click', () => {
-  if (layoutMode === 'physics') return;
-  layoutMode = 'physics';
-  btnPhysics.classList.add('active');
-  btnHierarchy.classList.remove('active');
-  if (network) { network.setOptions(buildOptions()); }
-});
+  try {
+    network = new vis.Network(document.getElementById('mynetwork'), {nodes:visNodes,edges:visEdges}, buildOptions());
+    network.on('click', p => { if(p.nodes.length){ const n=visNodes.get(p.nodes[0]); openNodePanel(n._raw); } else closeNodePanel(); });
+    network.on('stabilized', () => network.fit({animation:{duration:600,easingFunction:'easeInOutQuad'}}));
+  } catch (err) {
+    console.error('Vis.Network initialization failed:', err);
+    throw err;
+  }
+}
 
-// ── Zoom / Fit controls ───────────────────────────────────────────────────
-btnFit.addEventListener('click',    () => network?.fit({ animation: true }));
-btnZoomIn.addEventListener('click', () => network && network.moveTo({ scale: network.getScale() * 1.3, animation: true }));
-btnZoomOut.addEventListener('click',() => network && network.moveTo({ scale: network.getScale() * 0.75, animation: true }));
+function buildOptions() {
+  const base = {interaction:{hover:true,tooltipDelay:150,zoomView:true,dragView:true,dragNodes:true}};
+  if (layoutMode==='hierarchy') return {...base,
+    layout:{hierarchical:{enabled:true,direction:'UD',sortMethod:'directed',nodeSpacing:160,levelSeparation:110,treeSpacing:200}},
+    physics:{enabled:false}};
+  return {...base,
+    layout:{hierarchical:{enabled:false}},
+    physics:{enabled:true,solver:'forceAtlas2Based',forceAtlas2Based:{gravitationalConstant:-60,centralGravity:.005,springLength:180,springConstant:.05,damping:.5,avoidOverlap:.8},stabilization:{iterations:200}}};
+}
 
-// ── Side panel ────────────────────────────────────────────────────────────
-function openPanel(raw) {
-  const fname = basename(raw.file || '');
-  const idx   = fileColorMap[fname] ?? 0;
+btnH.addEventListener('click', () => { if(layoutMode==='hierarchy')return; layoutMode='hierarchy'; btnH.classList.add('active'); btnP.classList.remove('active'); if(network){network.setOptions(buildOptions());network.stabilize();} });
+btnP.addEventListener('click', () => { if(layoutMode==='physics')return; layoutMode='physics'; btnP.classList.add('active'); btnH.classList.remove('active'); if(network)network.setOptions(buildOptions()); });
+btnFit.addEventListener('click', () => network?.fit({animation:true}));
+document.getElementById('btn-zoom-in').addEventListener('click',  () => network?.moveTo({scale:network.getScale()*1.3,animation:true}));
+document.getElementById('btn-zoom-out').addEventListener('click', () => network?.moveTo({scale:network.getScale()*.75,animation:true}));
+
+// ── Node panel ────────────────────────────────────────────────────────────────
+function openNodePanel(raw) {
+  currentNodeName = raw.label;
+  const fname=basename(raw.file||''), idx=fileColorMap[fname]??0;
   document.getElementById('d-name').textContent   = raw.label  || '—';
   document.getElementById('d-file').textContent   = fname      || '—';
   document.getElementById('d-line').textContent   = raw.line   || '—';
   document.getElementById('d-author').textContent = raw.author || '—';
-  document.getElementById('d-group').textContent  = fname ? `${fname} (color ${idx + 1})` : '—';
+  document.getElementById('d-group').textContent  = fname ? `${fname} (color ${idx+1})`:'—';
   sidePanel.classList.add('open');
 }
-function closePanel() { sidePanel.classList.remove('open'); }
-closeBtn.addEventListener('click', closePanel);
+function closeNodePanel() { sidePanel.classList.remove('open'); }
+closeBtn.addEventListener('click', closeNodePanel);
+
+document.getElementById('run-whatif-from-node').addEventListener('click', () => {
+  if (!currentNodeName) return;
+  openWhatIf(currentNodeName);
+  closeNodePanel();
+});
+
+// ── What-If Panel ─────────────────────────────────────────────────────────────
+document.getElementById('whatif-toggle-btn').addEventListener('click', () => openWhatIf());
+document.getElementById('close-whatif').addEventListener('click', () => whatifPanel.classList.remove('open'));
+
+function openWhatIf(funcName) {
+  whatifPanel.classList.add('open');
+  if (funcName) {
+    // try to select it in dropdown, or fall back to manual input
+    const opt = [...wiFuncSel.options].find(o => o.value === funcName);
+    if (opt) { wiFuncSel.value = funcName; wiFuncInput.style.display='none'; }
+    else { wiFuncSel.value='__custom__'; wiFuncInput.style.display='block'; wiFuncInput.value=funcName; }
+  }
+}
+
+// Function list for dropdown
+async function loadFunctionList() {
+  try {
+    const res  = await fetch('/api/functions');
+    const data = await res.json();
+    if (data.functions) {
+      // Clear all options except first two (placeholder + manual)
+      while (wiFuncSel.options.length > 2) wiFuncSel.remove(2);
+      data.functions.forEach(fn => {
+        const opt = document.createElement('option');
+        opt.value = fn; opt.textContent = fn;
+        wiFuncSel.appendChild(opt);
+      });
+    }
+  } catch(e) { /* non-fatal */ }
+}
+loadFunctionList();  // also load on page open (in case graph was analyzed before)
+
+wiFuncSel.addEventListener('change', () => {
+  wiFuncInput.style.display = wiFuncSel.value === '__custom__' ? 'block' : 'none';
+});
+
+// Tabs
+document.querySelectorAll('.wi-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.wi-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.wi-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`wi-${tab.dataset.pane}-pane`).classList.add('active');
+  });
+});
+
+// ── Run What-If ───────────────────────────────────────────────────────────────
+const AGENT_MAP = {
+  'Senior Codebase Graph Analyst': {cls:'investigator', label:'🔍 Investigator — Graph Analyst'},
+  'Source Code Logic Reviewer':    {cls:'architect',    label:'🧬 Semantic Architect — Logic Reviewer'},
+  'Principal Software Architect':  {cls:'explainer',    label:'📝 Explainer — Principal Architect'},
+};
+
+wiRunBtn.addEventListener('click', runWhatIf);
+
+async function runWhatIf() {
+  const fn = wiFuncSel.value === '__custom__'
+    ? wiFuncInput.value.trim()
+    : wiFuncSel.value;
+  if (!fn || fn === '') { alert('Please select or type a function name.'); return; }
+
+  // Clear steps pane
+  wiStepsPane.innerHTML = '';
+  wiStepsPane.appendChild(wiThinking);
+  wiThinking.style.display = 'flex';
+  wiEmpty.style.display = 'none';
+  wiRepCont.innerHTML = '<span style="color:var(--muted);font-size:.8rem">Waiting for engine to finish…</span>';
+  wiCopyBtn.style.display = 'none';
+  rawReportMd = '';
+
+  // Switch to steps tab
+  document.querySelectorAll('.wi-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.wi-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-pane="steps"]').classList.add('active');
+  wiStepsPane.classList.add('active');
+
+  wiRunBtn.disabled = true; wiRunBtn.classList.add('loading');
+  whatIfStreamOpen = false;
+  whatIfServerError = false;
+
+  const es = new EventSource(`/api/whatif?function=${encodeURIComponent(fn)}`);
+
+  es.onopen = () => {
+    whatIfStreamOpen = true;
+    console.log('What-If SSE connected');
+  };
+
+  es.onmessage = e => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'start') {
+      addStepCard('log', `🚀 Starting What-If analysis for: <code>${fn}</code>`);
+      return;
+    }
+    if (msg.type === 'step') {
+      const text = msg.text || '';
+      let agentKey = Object.keys(AGENT_MAP).find(k => text.includes(k));
+      const info   = agentKey ? AGENT_MAP[agentKey] : null;
+      addStepCard(info ? info.cls : 'log', text, info ? info.label : null);
+      return;
+    }
+    if (msg.type === 'log') {
+      addStepCard('log', msg.text);
+      return;
+    }
+    if (msg.type === 'done') {
+      rawReportMd = msg.report || '';
+      wiThinking.style.display = 'none';
+      addStepCard('log', '✅ Analysis complete — switch to the Blast Report tab.');
+      wiRepCont.innerHTML = marked.parse(rawReportMd);
+      wiCopyBtn.style.display = 'block';
+      document.querySelectorAll('.wi-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.wi-pane').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-pane="report"]').classList.add('active');
+      wiReportPane.classList.add('active');
+      wiRunBtn.disabled = false; wiRunBtn.classList.remove('loading');
+      whatIfStreamOpen = false;
+      es.close();
+      return;
+    }
+    if (msg.type === 'error') {
+      whatIfServerError = true;
+      addStepCard('error', '❌ ' + (msg.text || 'Unknown error'));
+      wiThinking.style.display = 'none';
+      wiRunBtn.disabled = false; wiRunBtn.classList.remove('loading');
+      whatIfStreamOpen = false;
+      es.close();
+      return;
+    }
+  };
+
+  es.onerror = err => {
+    console.error('What-If SSE error', err, 'readyState', es.readyState, 'data:', err.data);
+    if (!whatIfServerError) {
+      addStepCard('error', '❌ Connection lost. See console for SSE error details.');
+    }
+    wiThinking.style.display = 'none';
+    wiRunBtn.disabled = false; wiRunBtn.classList.remove('loading');
+    whatIfStreamOpen = false;
+    es.close();
+  };
+}
+
+function addStepCard(cls, html, agentLabel) {
+  const card = document.createElement('div');
+  card.className = `step-card ${cls}`;
+  if (agentLabel) {
+    card.innerHTML = `<div class="step-agent">${agentLabel}</div>${escHtml(html)}`;
+  } else {
+    card.innerHTML = escHtml(html);
+  }
+  // Insert before the thinking indicator if it's showing
+  wiStepsPane.insertBefore(card, wiThinking);
+  card.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// minimal HTML escape (logs come from the server, but keep it safe)
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+// Copy markdown
+wiCopyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(rawReportMd).then(() => {
+    wiCopyBtn.textContent = '✅ Copied!';
+    setTimeout(() => wiCopyBtn.textContent = '📋 Copy Markdown', 2000);
+  });
+});
+});
 </script>
 </body>
 </html>
